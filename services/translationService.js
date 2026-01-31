@@ -1,25 +1,37 @@
+const { LingoDotDevEngine } = require('lingo.dev/sdk');
+
+// Initialize Lingo.dev Engine
+// Note: This requires LINGO_API_KEY in .env
+const lingo = new LingoDotDevEngine({
+    apiKey: process.env.LINGO_API_KEY,
+});
+
 /**
- * Translates text into the target language.
- * Currently a MOCK implementation for verification.
+ * Translates text into the target language using Lingo.dev.
  * 
  * @param {string} text - Text to translate.
  * @param {string} targetLang - Target language code (e.g., 'es', 'hi', 'fr').
- * @returns {Promise<string>} - Translated text (Mocked).
+ * @returns {Promise<string>} - Translated text.
  */
 const translateText = async (text, targetLang) => {
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 500));
+    if (!process.env.LINGO_API_KEY) {
+        console.warn("⚠️  LINGO_API_KEY is missing. Returning text with [Mock] prefix.");
+        return `[Mock Lingo Missing] ${text}`;
+    }
 
-    // Simple mock translation logic
-    const mockTranslations = {
-        'es': (t) => `[Spanish] ${t}`,
-        'hi': (t) => `[Hindi] ${t}`,
-        'fr': (t) => `[French] ${t}`,
-        'de': (t) => `[German] ${t}`
-    };
+    try {
+        console.log(`Sending text to Lingo.dev (${targetLang})...`);
+        // Lingo.dev usage: await lingo.localizeText(text, { sourceLocale: 'en', targetLocale: targetLang })
+        const result = await lingo.localizeText(text, {
+            sourceLocale: 'en',
+            targetLocale: targetLang
+        });
 
-    const translator = mockTranslations[targetLang] || ((t) => `[${targetLang}] ${t}`);
-    return translator(text);
+        return result || text; // Fallback if empty
+    } catch (error) {
+        console.error("❌ Lingo.dev Error:", error.message);
+        throw new Error(`Translation Failed: ${error.message}`);
+    }
 };
 
 /**
@@ -31,7 +43,7 @@ const translateText = async (text, targetLang) => {
  * @returns {Promise<Object>} - The translated script object.
  */
 const translateScript = async (scriptContent, targetLang) => {
-    console.log(`Translating script to ${targetLang}...`);
+    console.log(`Translating script to ${targetLang} using Lingo.dev...`);
 
     const translatedContent = {
         original_language: 'en',
@@ -48,15 +60,22 @@ const translateScript = async (scriptContent, targetLang) => {
     }
 
     // 2. Translate Segments (if available)
+    // Optimization: Lingo might handle arrays or batching? 
+    // For now, we iterate. Rate limits might apply, so we should be careful.
+    // If Lingo supports batch: await lingo.translate([list], ...)
     if (scriptContent.raw_transcript && scriptContent.raw_transcript.segments) {
-        for (const segment of scriptContent.raw_transcript.segments) {
+
+        // Let's try to map them parallel for speed, assuming Lingo handles concurrency
+        const promises = scriptContent.raw_transcript.segments.map(async (segment) => {
             const translatedText = await translateText(segment.text, targetLang);
-            translatedContent.segments.push({
+            return {
                 start: segment.start,
                 end: segment.end,
                 text: translatedText
-            });
-        }
+            };
+        });
+
+        translatedContent.segments = await Promise.all(promises);
     }
 
     return translatedContent;

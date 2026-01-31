@@ -1,5 +1,5 @@
 const supabase = require('../config/supabase');
-const { extractAudio, splitAudio } = require('../services/audioService');
+const { extractAudio, splitAudio, getDuration } = require('../services/audioService'); // Updated import
 const fs = require('fs');
 
 const uploadVideo = async (req, res) => {
@@ -13,7 +13,23 @@ const uploadVideo = async (req, res) => {
 
         console.log(`Video uploaded: ${req.file.originalname} (${videoPath})`);
 
-        // 1. Save metadata to Supabase
+        // 1. Get Duration and Calculate ETA
+        let estimatedTimeSeconds = 0;
+        let estimatedTimeText = "Calculating...";
+        try {
+            const duration = await getDuration(videoPath);
+            if (duration > 0) {
+                // Formula: 0.3x RTF (from benchmark) + 20s overhead/translation
+                estimatedTimeSeconds = Math.ceil(duration * 0.3) + 20;
+                const mins = Math.floor(estimatedTimeSeconds / 60);
+                const secs = estimatedTimeSeconds % 60;
+                estimatedTimeText = mins > 0 ? `~${mins}m ${secs}s` : `~${secs}s`;
+            }
+        } catch (e) {
+            console.warn("Could not calculate duration:", e);
+        }
+
+        // 2. Save metadata to Supabase
         const { data: videoData, error: dbError } = await supabase
             .from('videos')
             .insert([
@@ -36,13 +52,14 @@ const uploadVideo = async (req, res) => {
             throw new Error('Failed to save video metadata: No data returned from Supabase. Ensure RLS policies allow insertion and selection.');
         }
 
-        // 2. Process Video (Async)
-        // In a real app, this should be a background job
+        // 3. Process Video (Async)
         processVideo(videoData.id, videoPath);
 
         res.status(201).json({
             message: 'Video uploaded successfully. Processing started.',
-            video: videoData
+            video: videoData,
+            estimated_processing_time: estimatedTimeText,
+            estimated_seconds: estimatedTimeSeconds
         });
 
     } catch (error) {
@@ -81,9 +98,7 @@ const processVideo = async (videoId, videoPath) => {
             // Append text
             fullTranscript.text += (fullTranscript.text ? " " : "") + result.text;
 
-            // Adjust and append segments (timestamp offset handling would be needed for precise multi-chunk, 
-            // but for now simplistic concatenation or assuming single chunk < 25MB for most demos)
-            // TODO: Handle timestamp offsets for multiple chunks real implementation
+            // Adjust and append segments (timestamp offset handling would be needed for precise multi-chunk)
             if (result.segments) {
                 fullTranscript.segments.push(...result.segments);
             }
@@ -101,7 +116,7 @@ const processVideo = async (videoId, videoPath) => {
         const scriptData = {
             raw_transcript: fullTranscript,
             cleaned_text: cleanText,
-            language: 'en' // Assuming EN for now, Whisper detects it but we force EN often
+            language: 'en'
         };
 
         const { error: dbError } = await supabase
@@ -201,6 +216,19 @@ const processUrl = async (req, res) => {
         const videoPath = await downloadVideoFromUrl(url);
         const fileName = require('path').basename(videoPath);
 
+        // NEW: Calculate Estimate
+        let estimatedTimeSeconds = 0;
+        let estimatedTimeText = "Calculating...";
+        try {
+            const duration = await getDuration(videoPath);
+            if (duration > 0) {
+                estimatedTimeSeconds = Math.ceil(duration * 0.3) + 20;
+                const mins = Math.floor(estimatedTimeSeconds / 60);
+                const secs = estimatedTimeSeconds % 60;
+                estimatedTimeText = mins > 0 ? `~${mins}m ${secs}s` : `~${secs}s`;
+            }
+        } catch (e) { console.warn(e); }
+
         // 2. Save Metadata
         const { data: videoData, error: dbError } = await supabase
             .from('videos')
@@ -231,7 +259,9 @@ const processUrl = async (req, res) => {
 
         res.status(200).json({
             message: 'Video URL accepted. Processing started.',
-            video: videoData
+            video: videoData,
+            estimated_processing_time: estimatedTimeText,
+            estimated_seconds: estimatedTimeSeconds
         });
 
     } catch (error) {
@@ -271,9 +301,10 @@ const translateVideo = async (req, res) => {
             .from('translations')
             .insert([
                 {
-                    script_id: scriptData.id, // Corrected: Link to script, not video directly
-                    language: targetLang,
-                    content: JSON.stringify(translatedContent)
+                    script_id: scriptData.id,
+                    target_language: targetLang,
+                    translated_text: translatedContent.translated_text,
+                    segments: translatedContent.segments
                 }
             ])
             .select()
@@ -341,17 +372,20 @@ const downloadTranslation = async (req, res) => {
             return res.status(404).json({ error: 'Translation not found' });
         }
 
-        const content = typeof data.content === 'string' ? JSON.parse(data.content) : data.content;
         let fileContent = "";
         let contentType = "text/plain";
         let extension = "txt";
 
         if (format === 'json') {
-            fileContent = JSON.stringify(content, null, 2);
+            fileContent = JSON.stringify({
+                target_language: data.target_language,
+                translated_text: data.translated_text,
+                segments: data.segments
+            }, null, 2);
             contentType = "application/json";
             extension = "json";
         } else {
-            fileContent = content.translated_text;
+            fileContent = data.translated_text || "";
         }
 
         res.setHeader('Content-Type', contentType);

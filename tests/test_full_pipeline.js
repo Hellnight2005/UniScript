@@ -58,7 +58,14 @@ const runFullTest = async () => {
         // Note: API_URL already includes '/api/videos', so we just append '/translations/...'
         const transDl = await axios.get(`${API_URL}/translations/${translationId}/download`);
         console.log(`✅ Translation Download Valid (Size: ${transDl.data.length} chars)`);
-        console.log(`   Content: "${transDl.data.substring(0, 50)}..."`);
+
+        // Simple check if it's JSON (default)
+        if (typeof transDl.data === 'object') {
+            console.log(`   Target Lang: ${transDl.data.target_language}`);
+            console.log(`   Text Preview: "${(transDl.data.translated_text || "").substring(0, 50)}..."`);
+        } else {
+            console.log(`   Content: "${transDl.data.substring(0, 50)}..."`);
+        }
 
         console.log('\n🎉 ALL SYSTEMS GO! The entire pipeline is working perfectly.');
 
