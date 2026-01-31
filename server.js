@@ -10,6 +10,10 @@ const PORT = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 
+// Routes
+const videoRoutes = require('./routes/videoRoutes');
+app.use('/api/videos', videoRoutes);
+
 app.get('/', (req, res) => {
     res.send('UniScript Backend is running');
 });
