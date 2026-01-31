@@ -19,12 +19,15 @@ if (!fs.existsSync(PROCESSED_DIR)) {
 const extractAudio = (videoPath) => {
     return new Promise((resolve, reject) => {
         const fileName = path.basename(videoPath, path.extname(videoPath));
-        const audioPath = path.join(PROCESSED_DIR, `${fileName}.mp3`);
+        // Whisper prefers 16kHz mono WAV
+        const audioPath = path.join(PROCESSED_DIR, `${fileName}.wav`);
 
         console.log(`Starting audio extraction for: ${videoPath}`);
 
         ffmpeg(videoPath)
-            .toFormat('mp3')
+            .toFormat('wav')
+            .audioFrequency(16000)
+            .audioChannels(1)
             .on('end', () => {
                 console.log(`Audio extracted successfully: ${audioPath}`);
                 resolve(audioPath);
@@ -58,7 +61,7 @@ const splitAudio = (audioPath) => {
         console.log(`Audio file size (${fileSizeInMB.toFixed(2)}MB) exceeds limit. Splitting...`);
 
         const fileName = path.basename(audioPath, path.extname(audioPath));
-        const outputPattern = path.join(PROCESSED_DIR, `${fileName}_%03d.mp3`);
+        const outputPattern = path.join(PROCESSED_DIR, `${fileName}_%03d.wav`);
 
         // Split into 10-minute chunks (approx 10-15MB for MP3 standard quality)
         const segmentTime = 600;
@@ -75,7 +78,7 @@ const splitAudio = (audioPath) => {
                 // Find generated files
                 const dirFiles = fs.readdirSync(PROCESSED_DIR);
                 const splitFiles = dirFiles
-                    .filter(f => f.startsWith(`${fileName}_`) && f.endsWith('.mp3'))
+                    .filter(f => f.startsWith(`${fileName}_`) && f.endsWith('.wav'))
                     .map(f => path.join(PROCESSED_DIR, f))
                     .sort(); // Ensure order
 

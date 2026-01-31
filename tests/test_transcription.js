@@ -41,7 +41,9 @@ const runTest = async () => {
                 const scriptRes = await axios.get(`${API_URL}/${videoId}/script`);
                 if (scriptRes.status === 200) {
                     console.log('✅ Script generated and retrieved!');
-                    console.log('   Script Content Sample:', JSON.stringify(scriptRes.data.content, null, 2).substring(0, 200) + '...');
+                    const content = scriptRes.data.content;
+                    console.log(`   Segments found: ${content.raw_transcript.segments.length}`);
+                    console.log('   Script Content Sample:', JSON.stringify(content, null, 2).substring(0, 200) + '...');
                     scriptFound = true;
                 }
             } catch (err) {
