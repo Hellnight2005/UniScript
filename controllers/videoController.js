@@ -55,26 +55,140 @@ const uploadVideo = async (req, res) => {
     }
 };
 
+
+
+const { downloadVideoFromUrl } = require('../services/urlService');
+const { transcribeAudio, generateCleanScript } = require('../services/transcriptionService');
+
 const processVideo = async (videoId, videoPath) => {
     try {
         console.log(`Processing video ${videoId}...`);
 
-        // Extract Audio
+        // 1. Extract Audio
         const audioPath = await extractAudio(videoPath);
 
-        // Split Audio (if needed)
+        // 2. Split Audio (if needed)
         const audioChunks = await splitAudio(audioPath);
+        console.log(`Audio chunks to process: ${audioChunks.length}`);
 
-        console.log(`Video ${videoId} processed. Audio chunks: ${audioChunks.length}`);
+        // 3. Transcribe Chunks
+        let fullTranscript = { text: "", segments: [] };
 
-        // TODO: Create entries in 'scripts' table or queue for ASR
+        for (const chunkPath of audioChunks) {
+            console.log(`Transcribing chunk: ${chunkPath}`);
+            const result = await transcribeAudio(chunkPath);
+
+            // Append text
+            fullTranscript.text += (fullTranscript.text ? " " : "") + result.text;
+
+            // Adjust and append segments (timestamp offset handling would be needed for precise multi-chunk, 
+            // but for now simplistic concatenation or assuming single chunk < 25MB for most demos)
+            // TODO: Handle timestamp offsets for multiple chunks real implementation
+            if (result.segments) {
+                fullTranscript.segments.push(...result.segments);
+            }
+
+            // Clean up chunk if it's a split file
+            if (chunkPath !== audioPath && fs.existsSync(chunkPath)) {
+                fs.unlinkSync(chunkPath);
+            }
+        }
+
+        // 4. Generate Clean Script
+        const cleanText = await generateCleanScript(fullTranscript.text);
+
+        // 5. Store in Supabase
+        const scriptData = {
+            raw_transcript: fullTranscript,
+            cleaned_text: cleanText,
+            language: 'en' // Assuming EN for now, Whisper detects it but we force EN often
+        };
+
+        const { error: dbError } = await supabase
+            .from('scripts')
+            .insert([
+                {
+                    video_id: videoId,
+                    content: JSON.stringify(scriptData),
+                    is_cleaned: true
+                }
+            ]);
+
+        if (dbError) {
+            console.error('Failed to save script to DB:', dbError);
+        } else {
+            console.log(`Script saved for video ${videoId}`);
+        }
+
+        // Clean up extracted audio
+        if (fs.existsSync(audioPath)) {
+            fs.unlinkSync(audioPath);
+        }
 
     } catch (error) {
         console.error(`Error processing video ${videoId}:`, error);
     }
 };
 
-const { downloadVideoFromUrl } = require('../services/urlService');
+const getScript = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { data, error } = await supabase
+            .from('scripts')
+            .select('*')
+            .eq('video_id', id)
+            .single();
+
+        if (error) {
+            return res.status(404).json({ error: 'Script not found' });
+        }
+
+        // Parse content if it's stored as text
+        const content = typeof data.content === 'string' ? JSON.parse(data.content) : data.content;
+        res.json({ ...data, content });
+
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+const downloadScript = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { format } = req.query; // 'json' or 'txt'
+
+        const { data, error } = await supabase
+            .from('scripts')
+            .select('*')
+            .eq('video_id', id)
+            .single();
+
+        if (error) {
+            return res.status(404).json({ error: 'Script not found' });
+        }
+
+        const content = typeof data.content === 'string' ? JSON.parse(data.content) : data.content;
+        let fileContent = "";
+        let contentType = "text/plain";
+        let extension = "txt";
+
+        if (format === 'json') {
+            fileContent = JSON.stringify(content, null, 2);
+            contentType = "application/json";
+            extension = "json";
+        } else {
+            // Default to cleaned text for TXT download
+            fileContent = content.cleaned_text || content.raw_transcript.text;
+        }
+
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Content-Disposition', `attachment; filename="script-${id}.${extension}"`);
+        res.send(fileContent);
+
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
 
 const processUrl = async (req, res) => {
     try {
@@ -101,19 +215,23 @@ const processUrl = async (req, res) => {
             .single();
 
         if (dbError) {
-            // If DB fails, we might want to delete the file
             console.error('Supabase Error:', dbError);
-            // Non-blocking error for now or handle appropriately
+            throw new Error('Failed to save video metadata: ' + dbError.message);
         }
 
-        const videoId = videoData ? videoData.id : 'temp-id-' + Date.now();
+        if (!videoData) {
+            console.error('Supabase returned no data. Check RLS policies.');
+            throw new Error('Failed to save video metadata: No data returned from Supabase. Ensure RLS policies allow insertion and selection.');
+        }
+
+        const videoId = videoData.id;
 
         // 3. Start Processing (Async)
         processVideo(videoId, videoPath);
 
         res.status(200).json({
             message: 'Video URL accepted. Processing started.',
-            video: videoData || { id: videoId, title: fileName }
+            video: videoData
         });
 
     } catch (error) {
@@ -124,5 +242,7 @@ const processUrl = async (req, res) => {
 
 module.exports = {
     uploadVideo,
-    processUrl
+    processUrl,
+    getScript,
+    downloadScript
 };
