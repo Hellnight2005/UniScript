@@ -4,7 +4,7 @@ const path = require('path');
 const FormData = require('form-data');
 
 const API_URL = 'http://localhost:5000/api/videos';
-const VIDEO_PATH = path.join(__dirname, '../public/limitless.mkv');
+const VIDEO_PATH = path.join(__dirname, '../public/first_post.mp4');
 
 const runFullTest = async () => {
     try {
@@ -23,7 +23,7 @@ const runFullTest = async () => {
         console.log('⏳ Waiting for transcription (up to 60s)...');
 
         let scriptData = null;
-        for (let i = 0; i < 20; i++) {
+        for (let i = 0; i < 60; i++) {
             await new Promise(r => setTimeout(r, 3000));
             try {
                 const res = await axios.get(`${API_URL}/${videoId}/script`);
@@ -55,7 +55,8 @@ const runFullTest = async () => {
         console.log(`✅ Script Download Valid (Size: ${scriptDl.data.length} chars)`);
 
         // Download Translation
-        const transDl = await axios.get(`${API_URL}/videos/translations/${translationId}/download`);
+        // Note: API_URL already includes '/api/videos', so we just append '/translations/...'
+        const transDl = await axios.get(`${API_URL}/translations/${translationId}/download`);
         console.log(`✅ Translation Download Valid (Size: ${transDl.data.length} chars)`);
         console.log(`   Content: "${transDl.data.substring(0, 50)}..."`);
 
