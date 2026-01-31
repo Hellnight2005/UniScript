@@ -15,7 +15,7 @@ create table if not exists videos (
 create table if not exists scripts (
   id uuid default uuid_generate_v4() primary key,
   video_id uuid references videos(id) on delete cascade not null,
-  content text not null,
+  content jsonb not null, -- Optimized: using JSONB instead of TEXT
   is_cleaned boolean default false,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
@@ -24,10 +24,15 @@ create table if not exists scripts (
 create table if not exists translations (
   id uuid default uuid_generate_v4() primary key,
   script_id uuid references scripts(id) on delete cascade not null,
-  language text not null,
-  content text not null,
+  target_language text not null, -- Renamed from language
+  translated_text text, -- Main text content
+  segments jsonb, -- Timestamped segments
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
+
+-- Indexes for performance
+create index if not exists scripts_video_id_idx on scripts(video_id);
+create index if not exists translations_script_id_idx on translations(script_id);
 
 -- 2. Security (Row Level Security)
 -- Enable RLS on tables
