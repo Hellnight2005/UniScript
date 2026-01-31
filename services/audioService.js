@@ -1,5 +1,14 @@
 const ffmpeg = require('fluent-ffmpeg');
 const ffmpegPath = require('@ffmpeg-installer/ffmpeg').path;
+// Try/Catch for ffprobe in case install failed or is pending
+let ffprobePath;
+try {
+    ffprobePath = require('@ffprobe-installer/ffprobe').path;
+    ffmpeg.setFfprobePath(ffprobePath);
+} catch (e) {
+    console.warn("⚠️ ffprobe not found. Duration estimation may fail.");
+}
+
 ffmpeg.setFfmpegPath(ffmpegPath);
 
 const path = require('path');
@@ -10,6 +19,22 @@ const PROCESSED_DIR = 'processed/';
 if (!fs.existsSync(PROCESSED_DIR)) {
     fs.mkdirSync(PROCESSED_DIR, { recursive: true });
 }
+
+/**
+ * Gets duration of a media file in seconds.
+ * @param {string} filePath 
+ * @returns {Promise<number>} Duration in seconds
+ */
+const getDuration = (filePath) => {
+    return new Promise((resolve, reject) => {
+        if (!ffprobePath) return resolve(0); // Fallback if no ffprobe
+
+        ffmpeg.ffprobe(filePath, (err, metadata) => {
+            if (err) return reject(err);
+            resolve(metadata.format.duration || 0);
+        });
+    });
+};
 
 /**
  * Extracts audio from a video file.
@@ -94,5 +119,6 @@ const splitAudio = (audioPath) => {
 
 module.exports = {
     extractAudio,
-    splitAudio
+    splitAudio,
+    getDuration
 };
