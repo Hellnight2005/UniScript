@@ -235,7 +235,130 @@ const processUrl = async (req, res) => {
         });
 
     } catch (error) {
-        console.error('URL Processing Error:', error);
+        res.status(500).json({ error: error.message });
+    }
+};
+
+const { translateScript } = require('../services/translationService');
+
+const translateVideo = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { targetLang } = req.body;
+
+        if (!targetLang) {
+            return res.status(400).json({ error: 'Target language (targetLang) is required' });
+        }
+
+        // 1. Fetch original script
+        const { data: scriptData, error: scriptError } = await supabase
+            .from('scripts')
+            .select('*')
+            .eq('video_id', id)
+            .single();
+
+        if (scriptError || !scriptData) {
+            return res.status(404).json({ error: 'Original script not found. Please process the video first.' });
+        }
+
+        const content = typeof scriptData.content === 'string' ? JSON.parse(scriptData.content) : scriptData.content;
+
+        // 2. Perform Translation
+        const translatedContent = await translateScript(content, targetLang);
+
+        // 3. Store in 'translations' table
+        const { data: translationData, error: dbError } = await supabase
+            .from('translations')
+            .insert([
+                {
+                    script_id: scriptData.id, // Corrected: Link to script, not video directly
+                    language: targetLang,
+                    content: JSON.stringify(translatedContent)
+                }
+            ])
+            .select()
+            .single();
+
+        if (dbError) {
+            console.error('Translation DB Error:', dbError);
+            throw new Error('Failed to save translation.');
+        }
+
+        res.status(201).json({
+            message: `Translation to ${targetLang} successful`,
+            translation: translationData
+        });
+
+    } catch (error) {
+        console.error('Translation Error:', error);
+        res.status(500).json({ error: error.message });
+    }
+};
+
+const getTranslations = async (req, res) => {
+    try {
+        const { id } = req.params; // video_id
+
+        // 1. Get Script ID first
+        const { data: scriptData, error: scriptError } = await supabase
+            .from('scripts')
+            .select('id')
+            .eq('video_id', id)
+            .single();
+
+        if (scriptError || !scriptData) {
+            return res.json([]); // No script means no translations
+        }
+
+        // 2. Get Translations
+        const { data, error } = await supabase
+            .from('translations')
+            .select('*')
+            .eq('script_id', scriptData.id);
+
+        if (error) {
+            throw error;
+        }
+
+        res.json(data);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+const downloadTranslation = async (req, res) => {
+    try {
+        const { translationId } = req.params; // Note: using translation UUID, not video ID
+        const { format } = req.query;
+
+        const { data, error } = await supabase
+            .from('translations')
+            .select('*')
+            .eq('id', translationId)
+            .single();
+
+        if (error || !data) {
+            return res.status(404).json({ error: 'Translation not found' });
+        }
+
+        const content = typeof data.content === 'string' ? JSON.parse(data.content) : data.content;
+        let fileContent = "";
+        let contentType = "text/plain";
+        let extension = "txt";
+
+        if (format === 'json') {
+            fileContent = JSON.stringify(content, null, 2);
+            contentType = "application/json";
+            extension = "json";
+        } else {
+            fileContent = content.translated_text;
+        }
+
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Content-Disposition', `attachment; filename="translation-${data.language}-${translationId}.${extension}"`);
+        res.send(fileContent);
+
+    } catch (error) {
         res.status(500).json({ error: error.message });
     }
 };
@@ -244,5 +367,8 @@ module.exports = {
     uploadVideo,
     processUrl,
     getScript,
-    downloadScript
+    downloadScript,
+    translateVideo,
+    getTranslations,
+    downloadTranslation
 };
