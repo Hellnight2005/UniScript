@@ -19,11 +19,16 @@ const storage = multer.diskStorage({
 });
 
 const fileFilter = (req, file, cb) => {
-    const allowedTypes = ['video/mp4', 'video/mkv', 'video/x-matroska', 'video/avi', 'video/quicktime'];
-    if (allowedTypes.includes(file.mimetype)) {
+    const allowedVideoTypes = ['video/mp4', 'video/mkv', 'video/x-matroska', 'video/avi', 'video/quicktime'];
+    const allowedSubtitleTypes = ['application/x-subrip', 'text/vtt', 'text/plain', 'application/octet-stream'];
+
+    const ext = path.extname(file.originalname).toLowerCase();
+    const isSubtitleExt = ['.srt', '.vtt'].includes(ext);
+
+    if (allowedVideoTypes.includes(file.mimetype) || allowedSubtitleTypes.includes(file.mimetype) || isSubtitleExt) {
         cb(null, true);
     } else {
-        cb(new Error('Invalid file type. Only video files are allowed.'), false);
+        cb(new Error('Invalid file type. Only video and subtitle files are allowed.'), false);
     }
 };
 

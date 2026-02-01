@@ -4,69 +4,157 @@ const fs = require('fs');
 
 const uploadVideo = async (req, res) => {
     try {
-        if (!req.file) {
-            return res.status(400).json({ error: 'No video file uploaded' });
+        const files = req.files || {};
+        const videoFile = files['video'] ? files['video'][0] : null;
+        const subtitleFile = files['subtitle'] ? files['subtitle'][0] : null;
+
+        if (!videoFile && !subtitleFile) {
+            return res.status(400).json({ error: 'No file uploaded. Please upload a video or a subtitle file.' });
         }
 
-        const videoPath = req.file.path;
-        const { title } = req.body;
-
-        console.log(`Video uploaded: ${req.file.originalname} (${videoPath})`);
-
-        // 1. Get Duration and Calculate ETA
-        let estimatedTimeSeconds = 0;
-        let estimatedTimeText = "Calculating...";
-        try {
-            const duration = await getDuration(videoPath);
-            if (duration > 0) {
-                // Formula: 0.3x RTF (from benchmark) + 20s overhead/translation
-                estimatedTimeSeconds = Math.ceil(duration * 0.3) + 20;
-                const mins = Math.floor(estimatedTimeSeconds / 60);
-                const secs = estimatedTimeSeconds % 60;
-                estimatedTimeText = mins > 0 ? `~${mins}m ${secs}s` : `~${secs}s`;
-            }
-        } catch (e) {
-            console.warn("Could not calculate duration:", e);
+        if (videoFile && subtitleFile) {
+            return res.status(400).json({ error: 'Please upload EITHER a video OR a subtitle file, not both.' });
         }
 
-        // 2. Save metadata to Supabase
-        const { data: videoData, error: dbError } = await supabase
-            .from('videos')
-            .insert([
-                {
-                    title: title || req.file.originalname,
-                    video_url: videoPath, // Storing local path for now
-                    original_language: 'en' // Default
+        const { parseSRT } = require('../services/subtitleService');
+
+        // ...
+
+        // --- SUBTITLE UPLOAD FLOW ---
+        if (subtitleFile) {
+            console.log(`Subtitle uploaded: ${subtitleFile.originalname}`);
+
+            // 1. Read the file content
+            const subtitleContent = fs.readFileSync(subtitleFile.path, 'utf-8');
+
+            // 2. Parse Subtitle
+            let parsedScript = { text: subtitleContent, segments: [] };
+            try {
+                // Determine format based on extension or just try SRT
+                if (subtitleFile.originalname.toLowerCase().endsWith('.srt') || subtitleFile.originalname.toLowerCase().endsWith('.txt')) {
+                    parsedScript = parseSRT(subtitleContent);
                 }
-            ])
-            .select()
-            .single();
+            } catch (parseError) {
+                console.warn("Failed to parse subtitle structure, falling back to raw text:", parseError);
+            }
 
-        if (dbError) {
-            console.error('Supabase Error:', dbError);
-            throw new Error('Failed to save video metadata: ' + dbError.message);
+            // 3. Create "Video" Metadata (Placeholder for Text-Only Project)
+            const { data: videoData, error: dbError } = await supabase
+                .from('videos')
+                .insert([
+                    {
+                        title: req.body.title || subtitleFile.originalname,
+                        video_url: 'SUBTITLE_ONLY_UPLOAD', // Placeholder
+                        original_language: 'en'
+                    }
+                ])
+                .select()
+                .single();
+
+            if (dbError) {
+                console.error('Supabase Error (Video):', dbError);
+                throw new Error('Failed to create project from subtitle.');
+            }
+
+            // 4. Save Script to DB
+            const scriptData = {
+                raw_transcript: { text: parsedScript.text, segments: parsedScript.segments },
+                cleaned_text: parsedScript.text, // Use parsed full text
+                language: 'en'
+            };
+
+            const { error: scriptError } = await supabase
+                .from('scripts')
+                .insert([
+                    {
+                        video_id: videoData.id,
+                        content: JSON.stringify(scriptData),
+                        is_cleaned: true
+                    }
+                ]);
+
+            if (scriptError) {
+                console.error('Supabase Error (Script):', scriptError);
+                // Rollback video creation ideally, but for now just error
+                throw new Error('Failed to save subtitle script.');
+            }
+
+            // Clean up uploaded subtitle file
+            if (fs.existsSync(subtitleFile.path)) {
+                fs.unlinkSync(subtitleFile.path);
+            }
+
+            return res.status(201).json({
+                message: 'Subtitle uploaded successfully. Project created.',
+                video: videoData,
+                is_text_only: true
+            });
         }
 
-        if (!videoData) {
-            console.error('Supabase returned no data. Check RLS policies.');
-            throw new Error('Failed to save video metadata: No data returned from Supabase. Ensure RLS policies allow insertion and selection.');
+        // --- VIDEO UPLOAD FLOW (Existing) ---
+        if (videoFile) {
+            const videoPath = videoFile.path;
+            const { title } = req.body;
+
+            console.log(`Video uploaded: ${videoFile.originalname} (${videoPath})`);
+
+            // 1. Get Duration and Calculate ETA
+            let estimatedTimeSeconds = 0;
+            let estimatedTimeText = "Calculating...";
+            try {
+                const duration = await getDuration(videoPath);
+                if (duration > 0) {
+                    // Formula: 0.3x RTF (from benchmark) + 20s overhead/translation
+                    estimatedTimeSeconds = Math.ceil(duration * 0.3) + 20;
+                    const mins = Math.floor(estimatedTimeSeconds / 60);
+                    const secs = estimatedTimeSeconds % 60;
+                    estimatedTimeText = mins > 0 ? `~${mins}m ${secs}s` : `~${secs}s`;
+                }
+            } catch (e) {
+                console.warn("Could not calculate duration:", e);
+            }
+
+            // 2. Save metadata to Supabase
+            const { data: videoData, error: dbError } = await supabase
+                .from('videos')
+                .insert([
+                    {
+                        title: title || videoFile.originalname,
+                        video_url: videoPath, // Storing local path for now
+                        original_language: 'en' // Default
+                    }
+                ])
+                .select()
+                .single();
+
+            if (dbError) {
+                console.error('Supabase Error:', dbError);
+                throw new Error('Failed to save video metadata: ' + dbError.message);
+            }
+
+            if (!videoData) {
+                console.error('Supabase returned no data. Check RLS policies.');
+                throw new Error('Failed to save video metadata: No data returned from Supabase. Ensure RLS policies allow insertion and selection.');
+            }
+
+            // 3. Process Video (Async)
+            processVideo(videoData.id, videoPath);
+
+            return res.status(201).json({
+                message: 'Video uploaded successfully. Processing started.',
+                video: videoData,
+                estimated_processing_time: estimatedTimeText,
+                estimated_seconds: estimatedTimeSeconds
+            });
         }
-
-        // 3. Process Video (Async)
-        processVideo(videoData.id, videoPath);
-
-        res.status(201).json({
-            message: 'Video uploaded successfully. Processing started.',
-            video: videoData,
-            estimated_processing_time: estimatedTimeText,
-            estimated_seconds: estimatedTimeSeconds
-        });
 
     } catch (error) {
         console.error('Upload Error:', error);
         // Clean up uploaded file if error occurs
-        if (req.file && fs.existsSync(req.file.path)) {
-            // fs.unlinkSync(req.file.path); // Optional: keep for debugging
+        if (req.files) {
+            Object.values(req.files).flat().forEach(file => {
+                if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
+            });
         }
         res.status(500).json({ error: error.message });
     }

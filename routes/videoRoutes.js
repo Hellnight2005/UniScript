@@ -3,7 +3,7 @@ const router = express.Router();
 const upload = require('../middleware/upload');
 const videoController = require('../controllers/videoController');
 
-router.post('/upload', upload.single('video'), videoController.uploadVideo);
+router.post('/upload', upload.fields([{ name: 'video', maxCount: 1 }, { name: 'subtitle', maxCount: 1 }]), videoController.uploadVideo);
 
 router.get('/:id/script', videoController.getScript);
 router.get('/:id/script/download', videoController.downloadScript);
