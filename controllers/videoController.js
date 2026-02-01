@@ -74,8 +74,8 @@ const uploadVideo = async (req, res) => {
 
 
 
-const { downloadVideoFromUrl } = require('../services/urlService');
 const { transcribeAudio, generateCleanScript } = require('../services/transcriptionService');
+
 
 const processVideo = async (videoId, videoPath) => {
     try {
@@ -357,10 +357,20 @@ const getTranslations = async (req, res) => {
     }
 };
 
+// Helper to format seconds to SRT timecode (HH:MM:SS,mmm)
+const formatSRTTime = (seconds) => {
+    const date = new Date(0);
+    date.setMilliseconds(seconds * 1000);
+    const iso = date.toISOString();
+    // ISO is YYYY-MM-DDTHH:mm:ss.sssZ, we take 11-23 (HH:mm:ss.sss)
+    let timeCode = iso.substr(11, 12).replace('.', ',');
+    return timeCode;
+};
+
 const downloadTranslation = async (req, res) => {
     try {
-        const { translationId } = req.params; // Note: using translation UUID, not video ID
-        const { format } = req.query;
+        const { translationId } = req.params;
+        const { format } = req.query; // 'srt' or 'txt'
 
         const { data, error } = await supabase
             .from('translations')
@@ -374,22 +384,29 @@ const downloadTranslation = async (req, res) => {
 
         let fileContent = "";
         let contentType = "text/plain";
-        let extension = "txt";
+        let extension = "srt";
 
-        if (format === 'json') {
-            fileContent = JSON.stringify({
-                target_language: data.target_language,
-                translated_text: data.translated_text,
-                segments: data.segments
-            }, null, 2);
-            contentType = "application/json";
-            extension = "json";
-        } else {
+        // Default to SRT unless specified otherwise
+        if (format === 'txt') {
             fileContent = data.translated_text || "";
+            extension = "txt";
+        } else {
+            // SRT Generation
+            if (!data.segments || !Array.isArray(data.segments)) {
+                // Fallback if no segments are available
+                fileContent = "1\n00:00:00,000 --> 00:00:10,000\n" + (data.translated_text || "");
+            } else {
+                fileContent = data.segments.map((seg, index) => {
+                    const start = formatSRTTime(seg.start);
+                    const end = formatSRTTime(seg.end);
+                    return `${index + 1}\n${start} --> ${end}\n${seg.text}\n\n`;
+                }).join('');
+            }
+            extension = "srt";
         }
 
         res.setHeader('Content-Type', contentType);
-        res.setHeader('Content-Disposition', `attachment; filename="translation-${data.language}-${translationId}.${extension}"`);
+        res.setHeader('Content-Disposition', `attachment; filename="translation-${data.target_language}-${translationId}.${extension}"`);
         res.send(fileContent);
 
     } catch (error) {
@@ -399,7 +416,6 @@ const downloadTranslation = async (req, res) => {
 
 module.exports = {
     uploadVideo,
-    processUrl,
     getScript,
     downloadScript,
     translateVideo,
