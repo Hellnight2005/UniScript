@@ -41,6 +41,7 @@ export function VideoLibrary() {
         <div className="space-y-6">
             <div className="flex items-center justify-between">
                 <h2 className="text-2xl font-bold tracking-tight">Latest Uploads</h2>
+
                 <Badge variant="default">{videos.length} Videos</Badge>
             </div>
 
