@@ -116,7 +116,7 @@ export function ProfessionalUpload() {
 
                 <div className="mt-8 flex gap-4">
                     <Button
-                        className="w-full h-12 text-base font-semibold"
+                        className="w-full h-12 text-base font-semibold shadow-lg shadow-accent/20 hover:shadow-accent/40 active:scale-[0.98] transition-all bg-accent hover:bg-accent/90 text-white border-0"
                         disabled={!file || isUploading}
                         isLoading={isUploading}
                         onClick={handleUpload}

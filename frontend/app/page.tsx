@@ -9,10 +9,11 @@ export default async function Home() {
   const dict = await getDictionary('en');
 
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-black">
+    <div className="min-h-screen bg-zinc-50 dark:bg-black selection:bg-accent/30">
+      <div className="fixed inset-0 mesh-gradient opacity-10 dark:opacity-20 pointer-events-none" />
       <Navbar />
 
-      <main className="max-w-6xl mx-auto px-4 py-12">
+      <main className="relative max-w-6xl mx-auto px-4 py-12">
         {/* Hero Section */}
         <section className="mb-16 text-center lg:text-left flex flex-col lg:flex-row items-center justify-between gap-12">
           <div className="flex-1 max-w-xl">
