@@ -1,6 +1,5 @@
 import { getDictionary } from "@/get-dictionary";
 import { ProfessionalUpload } from "@/components/ProfessionalUpload";
-import { VideoLibrary } from "@/components/VideoLibrary";
 import { AnalyticsOverview } from "@/components/AnalyticsOverview";
 import { Navbar } from "@/components/Navbar";
 import { Play } from "lucide-react";
@@ -54,11 +53,6 @@ export default async function Home() {
             <p className="text-zinc-500">Real-time system metrics and usage stats</p>
           </div>
           <AnalyticsOverview />
-        </section>
-
-        {/* Video Library Section */}
-        <section>
-          <VideoLibrary />
         </section>
       </main>
 
