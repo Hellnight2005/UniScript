@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
+import { Card, CardHeader, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Card';
-import { FileVideo, Calendar, Globe, Languages } from 'lucide-react';
+import { FileVideo, Calendar, Globe } from 'lucide-react';
 
 export function VideoLibrary() {
     const [videos, setVideos] = useState<any[]>([]);

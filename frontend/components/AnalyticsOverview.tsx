@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
+import { Card, CardContent } from '@/components/ui/Card';
 import { Video, FileText, Activity, Zap } from 'lucide-react';
 
-export function AnalyticsOverview() {
+export function AnalyticsOverview({ dict }: { dict?: any }) {
+    const t = (key: string) => dict?.[key] || key;
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
 
@@ -25,31 +26,31 @@ export function AnalyticsOverview() {
 
     const stats = [
         {
-            label: 'Total Videos',
+            label: t('Total Videos'),
             value: data?.total_videos || 0,
             icon: Video,
-            description: 'Uploaded assets',
+            description: t('Uploaded assets'),
             color: 'bg-blue-500/10 text-blue-600'
         },
         {
-            label: 'Total Scripts',
+            label: t('Total Scripts'),
             value: data?.total_scripts || 0,
             icon: FileText,
-            description: 'Transcribed content',
+            description: t('Transcribed content'),
             color: 'bg-emerald-500/10 text-emerald-600'
         },
         {
-            label: 'Avg Speed',
+            label: t('Avg Speed'),
             value: '2.4x',
             icon: Zap,
-            description: 'Processing latency',
+            description: t('Processing latency'),
             color: 'bg-amber-500/10 text-amber-600'
         },
         {
-            label: 'System Load',
+            label: t('System Load'),
             value: 'Normal',
             icon: Activity,
-            description: 'Health status',
+            description: t('Health status'),
             color: 'bg-purple-500/10 text-purple-600'
         }
     ];

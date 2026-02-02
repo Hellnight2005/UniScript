@@ -7,8 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "i18n:push": "lingo push",
-    "i18n:pull": "lingo pull"
+    "i18n": "lingo run",
+    "i18n:status": "lingo status"
   },
   "dependencies": {
     "clsx": "^2.1.1",

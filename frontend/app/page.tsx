@@ -1,16 +1,22 @@
-import { getDictionary } from "@/get-dictionary";
 import { ProfessionalUpload } from "@/components/ProfessionalUpload";
 import { AnalyticsOverview } from "@/components/AnalyticsOverview";
 import { Navbar } from "@/components/Navbar";
 import { Play } from "lucide-react";
+import { getDictionary } from "@/get-dictionary";
+import { cookies } from "next/headers";
 
 export default async function Home() {
-  const dict = await getDictionary('en');
+  const cookieStore = await cookies();
+  const locale = cookieStore.get("lingo-locale")?.value || "en";
+  const dict = await getDictionary(locale);
+
+  // Helper to safely get text or fallback to key
+  const t = (key: string) => dict[key as keyof typeof dict] || key;
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-black selection:bg-accent/30">
       <div className="fixed inset-0 mesh-gradient opacity-10 dark:opacity-20 pointer-events-none" />
-      <Navbar />
+      <Navbar dict={dict} />
 
       <main className="relative max-w-6xl mx-auto px-4 py-12">
         {/* Hero Section */}
@@ -24,10 +30,10 @@ export default async function Home() {
               v1.0.0 Now Live
             </div>
             <h1 className="text-5xl font-black tracking-tight text-zinc-900 dark:text-zinc-50 mb-6 leading-[1.1]">
-              {dict.welcome}
+              {t("UniScript Dashboard")}
             </h1>
             <p className="text-xl text-zinc-600 dark:text-zinc-400 leading-relaxed mb-8">
-              {dict.subtitle}
+              {t("AI-Powered Content Localization Pipeline")}
             </p>
             <div className="flex flex-wrap items-center gap-4 justify-center lg:justify-start">
               <div className="flex -space-x-3 overflow-hidden">
@@ -42,17 +48,17 @@ export default async function Home() {
           </div>
 
           <div className="flex-1 w-full max-w-lg">
-            <ProfessionalUpload />
+            <ProfessionalUpload dict={dict} />
           </div>
         </section>
 
         {/* Analytics Section */}
         <section className="mb-20">
           <div className="mb-8">
-            <h2 className="text-2xl font-bold tracking-tight">{dict.analytics_title}</h2>
-            <p className="text-zinc-500">Real-time system metrics and usage stats</p>
+            <h2 className="text-2xl font-bold tracking-tight">{t("Performance Overview")}</h2>
+            <p className="text-zinc-500">{t("Real-time system metrics and usage stats")}</p>
           </div>
-          <AnalyticsOverview />
+          <AnalyticsOverview dict={dict} />
         </section>
       </main>
 
@@ -65,9 +71,10 @@ export default async function Home() {
             <span className="font-bold text-sm tracking-tighter">UNISCRIPT</span>
           </div>
           <p className="text-xs text-zinc-400 font-mono">
-            {dict.connected_to}: {process.env.NEXT_PUBLIC_API_URL}
+            {t("Connected to production nodes")}: {process.env.NEXT_PUBLIC_API_URL}
           </p>
           <div className="flex gap-6 text-xs font-medium text-zinc-500 uppercase tracking-widest">
+            <a href="#" className="hover:text-black dark:hover:text-white transition-colors">{t("Documentation")}</a>
             <a href="#" className="hover:text-black dark:hover:text-white transition-colors">Privacy</a>
             <a href="#" className="hover:text-black dark:hover:text-white transition-colors">Terms</a>
             <a href="#" className="hover:text-black dark:hover:text-white transition-colors">API</a>

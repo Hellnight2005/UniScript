@@ -3,7 +3,19 @@
   "locale": {
     "source": "en",
     "targets": [
-      "es"
+      "es",
+      "fr",
+      "de",
+      "ja",
+      "ru",
+      "zh",
+      "hi",
+      "ar",
+      "ko",
+      "pt",
+      "it",
+      "nl",
+      "tr"
     ]
   },
   "buckets": {
