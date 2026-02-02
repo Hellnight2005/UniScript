@@ -13,6 +13,26 @@ const lingo = new LingoDotDevEngine({
  * @param {string} targetLang - Target language code (e.g., 'es', 'hi', 'fr').
  * @returns {Promise<string>} - Translated text.
  */
+const retryOperation = async (operation, maxRetries = 3, delay = 1000) => {
+    for (let i = 0; i < maxRetries; i++) {
+        try {
+            return await operation();
+        } catch (error) {
+            if (i === maxRetries - 1) throw error;
+            console.warn(`Translation operation failed (attempt ${i + 1}/${maxRetries}), retrying in ${delay}ms...`, error.message);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            delay *= 2;
+        }
+    }
+};
+
+/**
+ * Translates text into the target language using Lingo.dev.
+ * 
+ * @param {string} text - Text to translate.
+ * @param {string} targetLang - Target language code (e.g., 'es', 'hi', 'fr').
+ * @returns {Promise<string>} - Translated text.
+ */
 const translateText = async (text, targetLang) => {
     if (!process.env.LINGO_API_KEY) {
         console.warn("⚠️  LINGO_API_KEY is missing. Returning text with [Mock] prefix.");
@@ -22,10 +42,11 @@ const translateText = async (text, targetLang) => {
     try {
         console.log(`Sending text to Lingo.dev (${targetLang})...`);
         // Lingo.dev usage: await lingo.localizeText(text, { sourceLocale: 'en', targetLocale: targetLang })
-        const result = await lingo.localizeText(text, {
+        // Lingo.dev usage: await lingo.localizeText(text, { sourceLocale: 'en', targetLocale: targetLang })
+        const result = await retryOperation(() => lingo.localizeText(text, {
             sourceLocale: 'en',
             targetLocale: targetLang
-        });
+        }));
 
         return result || text; // Fallback if empty
     } catch (error) {
@@ -65,17 +86,31 @@ const translateScript = async (scriptContent, targetLang) => {
     // If Lingo supports batch: await lingo.translate([list], ...)
     if (scriptContent.raw_transcript && scriptContent.raw_transcript.segments) {
 
-        // Let's try to map them parallel for speed, assuming Lingo handles concurrency
-        const promises = scriptContent.raw_transcript.segments.map(async (segment) => {
-            const translatedText = await translateText(segment.text, targetLang);
-            return {
-                start: segment.start,
-                end: segment.end,
-                text: translatedText
-            };
-        });
+        // Process in batches to avoid rate limits / network timeouts
+        const segments = scriptContent.raw_transcript.segments;
+        const BATCH_SIZE = 5;
+        const results = [];
 
-        translatedContent.segments = await Promise.all(promises);
+        for (let i = 0; i < segments.length; i += BATCH_SIZE) {
+            const batch = segments.slice(i, i + BATCH_SIZE);
+            const batchPromises = batch.map(async (segment) => {
+                try {
+                    const translatedText = await translateText(segment.text, targetLang);
+                    return {
+                        start: segment.start,
+                        end: segment.end,
+                        text: translatedText
+                    };
+                } catch (e) {
+                    console.error(`Failed to translate segment at ${segment.start}:`, e.message);
+                    return { ...segment, text: `[Error] ${segment.text}` }; // Fallback to original
+                }
+            });
+            const batchResults = await Promise.all(batchPromises);
+            results.push(...batchResults);
+        }
+
+        translatedContent.segments = results;
     }
 
     return translatedContent;

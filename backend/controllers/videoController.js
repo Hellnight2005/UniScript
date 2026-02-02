@@ -2,6 +2,20 @@ const supabase = require('../config/supabase');
 const { extractAudio, splitAudio, getDuration } = require('../services/audioService'); // Updated import
 const fs = require('fs');
 
+
+const retryOperation = async (operation, maxRetries = 3, delay = 1000) => {
+    for (let i = 0; i < maxRetries; i++) {
+        try {
+            return await operation();
+        } catch (error) {
+            if (i === maxRetries - 1) throw error;
+            console.warn(`Supabase operation failed (attempt ${i + 1}/${maxRetries}), retrying in ${delay}ms...`, error.message);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            delay *= 2; // Exponential backoff
+        }
+    }
+};
+
 const uploadVideo = async (req, res) => {
     try {
         const files = req.files || {};
@@ -39,7 +53,7 @@ const uploadVideo = async (req, res) => {
             }
 
             // 3. Create "Video" Metadata (Placeholder for Text-Only Project)
-            const { data: videoData, error: dbError } = await supabase
+            const { data: videoData, error: dbError } = await retryOperation(() => supabase
                 .from('videos')
                 .insert([
                     {
@@ -49,7 +63,7 @@ const uploadVideo = async (req, res) => {
                     }
                 ])
                 .select()
-                .single();
+                .single());
 
             if (dbError) {
                 console.error('Supabase Error (Video):', dbError);
@@ -63,7 +77,7 @@ const uploadVideo = async (req, res) => {
                 language: 'en'
             };
 
-            const { error: scriptError } = await supabase
+            const { error: scriptError } = await retryOperation(() => supabase
                 .from('scripts')
                 .insert([
                     {
@@ -71,7 +85,7 @@ const uploadVideo = async (req, res) => {
                         content: JSON.stringify(scriptData),
                         is_cleaned: true
                     }
-                ]);
+                ]));
 
             if (scriptError) {
                 console.error('Supabase Error (Script):', scriptError);
@@ -185,6 +199,7 @@ const processVideo = async (videoId, videoPath) => {
         console.log(`Processing video ${videoId}...`);
 
         let fullTranscript = { text: "", segments: [] };
+        let audioPath = null;
         const isSubtitleOnly = videoPath === 'SUBTITLE_ONLY_UPLOAD' ||
             videoPath.toLowerCase().endsWith('.srt') ||
             videoPath.toLowerCase().endsWith('.txt');
@@ -212,7 +227,7 @@ const processVideo = async (videoId, videoPath) => {
             await supabase.from('videos').update({ status: 'EXTRACTING_AUDIO', progress: 10 }).eq('id', videoId);
 
             // 1. Extract Audio
-            const audioPath = await extractAudio(videoPath);
+            audioPath = await extractAudio(videoPath);
 
             // Update: AUDIO_EXTRACTED (25%)
             await supabase.from('videos').update({ status: 'AUDIO_EXTRACTED', progress: 25 }).eq('id', videoId);
@@ -258,20 +273,47 @@ const processVideo = async (videoId, videoPath) => {
             language: 'en'
         };
 
-        const { data: savedScript, error: dbError } = await supabase
+        // Check for existing script first
+        const { data: existingScript } = await supabase
             .from('scripts')
-            .insert([
-                {
-                    video_id: videoId,
+            .select('id')
+            .eq('video_id', videoId)
+            .maybeSingle(); // Use maybeSingle to avoid errors if 0 or 1 exists (if >1 invalid but we handle)
+
+        let scriptId;
+
+        if (existingScript) {
+            // Update existing
+            const { error: updateError } = await retryOperation(() => supabase
+                .from('scripts')
+                .update({
                     content: JSON.stringify(scriptData),
                     is_cleaned: true
-                }
-            ])
-            .select()
-            .single();
+                })
+                .eq('id', existingScript.id));
+            if (updateError) throw updateError;
+            scriptId = existingScript.id;
+            console.log(`Updated existing script: ${scriptId}`);
+        } else {
+            // Insert new
+            const { data: savedScript, error: dbError } = await retryOperation(() => supabase
+                .from('scripts')
+                .insert([
+                    {
+                        video_id: videoId,
+                        content: JSON.stringify(scriptData),
+                        is_cleaned: true
+                    }
+                ])
+                .select()
+                .single());
 
-        if (dbError) throw dbError;
-        const scriptId = savedScript.id;
+            if (dbError) throw dbError;
+            scriptId = savedScript.id;
+            console.log(`Created new script: ${scriptId}`);
+        }
+
+
 
         // Update: DONE for Transcription (90%)
         await supabase.from('videos').update({ progress: 90 }).eq('id', videoId);
@@ -313,7 +355,7 @@ const processVideo = async (videoId, videoPath) => {
         await supabase.from('videos').update({ status: 'DONE', progress: 100 }).eq('id', videoId);
         console.log(`Job complete for video ${videoId}`);
 
-        if (fs.existsSync(audioPath)) {
+        if (audioPath && fs.existsSync(audioPath)) {
             fs.unlinkSync(audioPath);
         }
 
@@ -396,7 +438,8 @@ const getScript = async (req, res) => {
             .from('scripts')
             .select('*')
             .eq('video_id', id)
-            .single();
+            .limit(1)
+            .maybeSingle(); // Change .single() to .maybeSingle() with limit(1) for robustness
 
         if (error) {
             return res.status(404).json({ error: 'Script not found' });

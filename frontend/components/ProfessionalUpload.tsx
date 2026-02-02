@@ -131,7 +131,7 @@ export function ProfessionalUpload({ dict }: { dict?: any }) {
                 } catch (e) {
                     console.error("Polling error", e);
                 }
-            }, 2000);
+            }, 4000);
 
         } catch (error) {
             console.error(error);
@@ -181,6 +181,7 @@ export function ProfessionalUpload({ dict }: { dict?: any }) {
             if (!uploadRes.ok) throw new Error('Upload failed');
             const data = await uploadRes.json();
             const newId = data.video.id;
+            setIsUploading(false); // Fix: Upload is done, now we process
             setJobId(newId);
 
             // Start Processing with Language
@@ -238,7 +239,7 @@ export function ProfessionalUpload({ dict }: { dict?: any }) {
                 } catch (e) {
                     console.error(e);
                 }
-            }, 1000);
+            }, 4000);
 
         } catch (e) {
             console.error(e);
