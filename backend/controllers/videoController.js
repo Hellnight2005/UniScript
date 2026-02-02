@@ -95,35 +95,35 @@ const uploadVideo = async (req, res) => {
         if (videoFile) {
             const videoPath = videoFile.path;
             const { title } = req.body;
+            const isActuallySubtitle = videoFile.originalname.toLowerCase().endsWith('.srt') ||
+                videoFile.originalname.toLowerCase().endsWith('.txt');
 
-            console.log(`Video uploaded: ${videoFile.originalname} (${videoPath})`);
+            console.log(`Video field upload: ${videoFile.originalname} (${videoPath})`);
 
             // FILE SIZE CHECK
             const ONE_GB = 1024 * 1024 * 1024;
             if (videoFile.size > ONE_GB) {
-                // Delete the file immediately
-                if (fs.existsSync(videoPath)) {
-                    fs.unlinkSync(videoPath);
-                }
-                return res.status(400).json({
-                    error: 'Video file is too large (> 1GB). Please upload a subtitle file instead or compress the video.'
-                });
+                // ... (existing large file logic)
+                if (fs.existsSync(videoPath)) fs.unlinkSync(videoPath);
+                return res.status(400).json({ error: 'Video file too large.' });
             }
 
-            // 1. Get Duration and Calculate ETA
-            let estimatedTimeSeconds = 0;
-            let estimatedTimeText = "Calculating...";
-            try {
-                const duration = await getDuration(videoPath);
-                if (duration > 0) {
-                    // Formula: 0.3x RTF (from benchmark) + 20s overhead/translation
-                    estimatedTimeSeconds = Math.ceil(duration * 0.3) + 20;
-                    const mins = Math.floor(estimatedTimeSeconds / 60);
-                    const secs = estimatedTimeSeconds % 60;
-                    estimatedTimeText = mins > 0 ? `~${mins}m ${secs}s` : `~${secs}s`;
-                }
-            } catch (e) {
-                console.warn("Could not calculate duration:", e);
+            // 1. Get Duration and Calculate ETA (SKIP for text files)
+            let estimatedTimeSeconds = 30; // Default for text
+            let estimatedTimeText = "~30s";
+
+            if (!isActuallySubtitle) {
+                try {
+                    const duration = await getDuration(videoPath);
+                    if (duration > 0) {
+                        estimatedTimeSeconds = Math.ceil(duration * 0.3) + 20;
+                        const mins = Math.floor(estimatedTimeSeconds / 60);
+                        const secs = estimatedTimeSeconds % 60;
+                        estimatedTimeText = mins > 0 ? `~${mins}m ${secs}s` : `~${secs}s`;
+                    }
+                } catch (e) { console.warn("Duration check skipped/failed:", e); }
+            } else {
+                console.log("Uploaded text file into video field. Treating as subtitle asset.");
             }
 
             // 2. Save metadata to Supabase
@@ -134,7 +134,7 @@ const uploadVideo = async (req, res) => {
                         title: title || videoFile.originalname,
                         video_url: videoPath,
                         original_language: 'en',
-                        status: 'PENDING',
+                        status: 'UPLOADED',
                         progress: 0
                     }
                 ])
@@ -151,8 +151,8 @@ const uploadVideo = async (req, res) => {
                 throw new Error('Failed to save video metadata: No data returned from Supabase. Ensure RLS policies allow insertion and selection.');
             }
 
-            // 3. Process Video (Async)
-            processVideo(videoData.id, videoPath);
+            // 3. DO NOT Process Video yet (Wait for Language Selection)
+            // processVideo(videoData.id, videoPath);
 
             return res.status(201).json({
                 message: 'Video uploaded successfully. Processing started.',
@@ -177,47 +177,71 @@ const uploadVideo = async (req, res) => {
 
 
 const { transcribeAudio, generateCleanScript } = require('../services/transcriptionService');
+const { translateScript } = require('../services/translationService');
 
 
 const processVideo = async (videoId, videoPath) => {
     try {
         console.log(`Processing video ${videoId}...`);
 
-        // Update: EXTRACTING_AUDIO (10%)
-        await supabase.from('videos').update({ status: 'EXTRACTING_AUDIO', progress: 10 }).eq('id', videoId);
-
-        // 1. Extract Audio
-        const audioPath = await extractAudio(videoPath);
-
-        // Update: AUDIO_EXTRACTED (25%)
-        await supabase.from('videos').update({ status: 'AUDIO_EXTRACTED', progress: 25 }).eq('id', videoId);
-
-        // 2. Split Audio (if needed)
-        const audioChunks = await splitAudio(audioPath);
-        console.log(`Audio chunks to process: ${audioChunks.length}`);
-
-        // Update: TRANSCRIBING (40%)
-        await supabase.from('videos').update({ status: 'TRANSCRIBING', progress: 40 }).eq('id', videoId);
-
-        // 3. Transcribe Chunks
         let fullTranscript = { text: "", segments: [] };
+        const isSubtitleOnly = videoPath === 'SUBTITLE_ONLY_UPLOAD' ||
+            videoPath.toLowerCase().endsWith('.srt') ||
+            videoPath.toLowerCase().endsWith('.txt');
 
-        for (let i = 0; i < audioChunks.length; i++) {
-            const chunkPath = audioChunks[i];
-            console.log(`Transcribing chunk: ${chunkPath}`);
-            const result = await transcribeAudio(chunkPath);
+        if (isSubtitleOnly) {
+            console.log("Detected subtitle-only asset. Skipping audio extraction.");
+            // 1. Fetch content from scripts table (if uploaded via subtitle flow)
+            const { data: scriptData } = await supabase.from('scripts').select('content').eq('video_id', videoId).single();
 
-            fullTranscript.text += (fullTranscript.text ? " " : "") + result.text;
-            if (result.segments) {
-                fullTranscript.segments.push(...result.segments);
+            if (scriptData) {
+                const content = typeof scriptData.content === 'string' ? JSON.parse(scriptData.content) : scriptData.content;
+                fullTranscript = content.raw_transcript || { text: content.cleaned_text, segments: [] };
+            } else if (fs.existsSync(videoPath)) {
+                // Fallback: Read file direct if it's on disk
+                const { parseSRT } = require('../services/subtitleService');
+                const content = fs.readFileSync(videoPath, 'utf-8');
+                const parsed = parseSRT(content);
+                fullTranscript = { text: parsed.text, segments: parsed.segments };
             }
 
-            // Update Progress incrementally during transcription (40% to 75%)
-            const progress = 40 + Math.floor(((i + 1) / audioChunks.length) * 35);
-            await supabase.from('videos').update({ progress }).eq('id', videoId);
+            await supabase.from('videos').update({ status: 'TRANSCRIBED', progress: 70 }).eq('id', videoId);
+        } else {
+            // --- REGULAR VIDEO FLOW ---
+            // Update: EXTRACTING_AUDIO (10%)
+            await supabase.from('videos').update({ status: 'EXTRACTING_AUDIO', progress: 10 }).eq('id', videoId);
 
-            if (chunkPath !== audioPath && fs.existsSync(chunkPath)) {
-                fs.unlinkSync(chunkPath);
+            // 1. Extract Audio
+            const audioPath = await extractAudio(videoPath);
+
+            // Update: AUDIO_EXTRACTED (25%)
+            await supabase.from('videos').update({ status: 'AUDIO_EXTRACTED', progress: 25 }).eq('id', videoId);
+
+            // 2. Split Audio (if needed)
+            const audioChunks = await splitAudio(audioPath);
+            console.log(`Audio chunks to process: ${audioChunks.length}`);
+
+            // Update: TRANSCRIBING (40%)
+            await supabase.from('videos').update({ status: 'TRANSCRIBING', progress: 40 }).eq('id', videoId);
+
+            // 3. Transcribe Chunks
+            for (let i = 0; i < audioChunks.length; i++) {
+                const chunkPath = audioChunks[i];
+                console.log(`Transcribing chunk: ${chunkPath}`);
+                const result = await transcribeAudio(chunkPath);
+
+                fullTranscript.text += (fullTranscript.text ? " " : "") + result.text;
+                if (result.segments) {
+                    fullTranscript.segments.push(...result.segments);
+                }
+
+                // Update Progress incrementally during transcription (40% to 75%)
+                const progress = 40 + Math.floor(((i + 1) / audioChunks.length) * 35);
+                await supabase.from('videos').update({ progress }).eq('id', videoId);
+
+                if (chunkPath !== audioPath && fs.existsSync(chunkPath)) {
+                    fs.unlinkSync(chunkPath);
+                }
             }
         }
 
@@ -234,7 +258,7 @@ const processVideo = async (videoId, videoPath) => {
             language: 'en'
         };
 
-        const { error: dbError } = await supabase
+        const { data: savedScript, error: dbError } = await supabase
             .from('scripts')
             .insert([
                 {
@@ -242,13 +266,52 @@ const processVideo = async (videoId, videoPath) => {
                     content: JSON.stringify(scriptData),
                     is_cleaned: true
                 }
-            ]);
+            ])
+            .select()
+            .single();
 
         if (dbError) throw dbError;
+        const scriptId = savedScript.id;
+
+        // Update: DONE for Transcription (90%)
+        await supabase.from('videos').update({ progress: 90 }).eq('id', videoId);
+
+        // EXTRA: Check if a Target Language was provided for Auto-Translation
+        const { data: currentVideo } = await supabase
+            .from('videos')
+            .select('target_language')
+            .eq('id', videoId)
+            .single();
+
+        if (currentVideo?.target_language && currentVideo.target_language !== 'en') {
+            const targetLang = currentVideo.target_language;
+            console.log(`Auto-translating to ${targetLang}...`);
+            await supabase.from('videos').update({ status: 'TRANSLATING', progress: 95 }).eq('id', videoId);
+
+            try {
+                // Perform Translation
+                const translatedContent = await translateScript(scriptData, targetLang);
+
+                // Store in 'translations' table
+                await supabase
+                    .from('translations')
+                    .insert([
+                        {
+                            script_id: scriptId,
+                            target_language: targetLang,
+                            translated_text: translatedContent.translated_text,
+                            segments: translatedContent.segments
+                        }
+                    ]);
+                console.log(`Auto-translation to ${targetLang} complete.`);
+            } catch (transError) {
+                console.error("Auto-translation failed:", transError);
+            }
+        }
 
         // Update: DONE (100%)
         await supabase.from('videos').update({ status: 'DONE', progress: 100 }).eq('id', videoId);
-        console.log(`Script saved for video ${videoId}`);
+        console.log(`Job complete for video ${videoId}`);
 
         if (fs.existsSync(audioPath)) {
             fs.unlinkSync(audioPath);
@@ -263,12 +326,56 @@ const processVideo = async (videoId, videoPath) => {
     }
 };
 
+const startProcessing = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { targetLanguage } = req.body;
+
+        // 1. Get Video Metadata
+        const { data: video, error } = await supabase
+            .from('videos')
+            .select('*')
+            .eq('id', id)
+            .single();
+
+        if (error || !video) {
+            return res.status(404).json({ error: 'Video not found' });
+        }
+
+        // 2. Update Target Language and Status
+        const { error: updateError } = await supabase
+            .from('videos')
+            .update({
+                target_language: targetLanguage || 'en',
+                status: 'PENDING',
+                progress: 0
+            })
+            .eq('id', id);
+
+        if (updateError) throw updateError;
+
+        // 3. Start Processing (Async)
+        processVideo(id, video.video_url);
+
+        const { data: updatedVideo } = await supabase
+            .from('videos')
+            .select('*')
+            .eq('id', id)
+            .single();
+
+        res.json({ message: 'Processing started', video: updatedVideo });
+
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
 const getVideoStatus = async (req, res) => {
     try {
         const { id } = req.params;
         const { data, error } = await supabase
             .from('videos')
-            .select('status, progress, error_message')
+            .select('status, progress, error_message, target_language')
             .eq('id', id)
             .single();
 
@@ -307,8 +414,44 @@ const getScript = async (req, res) => {
 const downloadScript = async (req, res) => {
     try {
         const { id } = req.params;
-        const { format } = req.query; // 'json' or 'txt'
+        const { format, target } = req.query; // 'json', 'txt', 'srt' | target='true'
 
+        if (target === 'true') {
+            // 1. Get Script ID
+            const { data: scriptData } = await supabase.from('scripts').select('id').eq('video_id', id).single();
+            if (!scriptData) return res.status(404).json({ error: 'Original script not found' });
+
+            // 2. Get Translation
+            const { data: trans, error: transError } = await supabase
+                .from('translations')
+                .select('*')
+                .eq('script_id', scriptData.id)
+                .single();
+
+            if (transError || !trans) {
+                return res.status(404).json({ error: 'Translation not found' });
+            }
+
+            let fileContent = "";
+            let extension = format || "txt";
+
+            if (format === 'srt') {
+                const segments = trans.segments || [];
+                fileContent = segments.map((seg, index) => {
+                    const start = formatSRTTime(seg.start);
+                    const end = formatSRTTime(seg.end);
+                    return `${index + 1}\n${start} --> ${end}\n${seg.text}\n\n`;
+                }).join('');
+            } else {
+                fileContent = trans.translated_text || "";
+            }
+
+            res.setHeader('Content-Type', 'text/plain');
+            res.setHeader('Content-Disposition', `attachment; filename="translation-${trans.target_language}-${id}.${extension}"`);
+            return res.send(fileContent);
+        }
+
+        // Default: Original Script
         const { data, error } = await supabase
             .from('scripts')
             .select('*')
@@ -322,19 +465,26 @@ const downloadScript = async (req, res) => {
         const content = typeof data.content === 'string' ? JSON.parse(data.content) : data.content;
         let fileContent = "";
         let contentType = "text/plain";
-        let extension = "txt";
+        let extension = format || "txt";
 
         if (format === 'json') {
             fileContent = JSON.stringify(content, null, 2);
             contentType = "application/json";
             extension = "json";
+        } else if (format === 'srt') {
+            const segments = content.raw_transcript?.segments || [];
+            fileContent = segments.map((seg, index) => {
+                const start = formatSRTTime(seg.start);
+                const end = formatSRTTime(seg.end);
+                return `${index + 1}\n${start} --> ${end}\n${seg.text}\n\n`;
+            }).join('');
         } else {
             // Default to cleaned text for TXT download
-            fileContent = content.cleaned_text || content.raw_transcript.text;
+            fileContent = content.cleaned_text || content.raw_transcript?.text || "";
         }
 
         res.setHeader('Content-Type', contentType);
-        res.setHeader('Content-Disposition', `attachment; filename="script-${id}.${extension}"`);
+        res.setHeader('Content-Disposition', `attachment; filename="original-script-${id}.${extension}"`);
         res.send(fileContent);
 
     } catch (error) {
@@ -406,7 +556,7 @@ const processUrl = async (req, res) => {
     }
 };
 
-const { translateScript } = require('../services/translationService');
+
 
 const translateVideo = async (req, res) => {
     try {
@@ -604,5 +754,6 @@ module.exports = {
     downloadTranslation,
     getLatestVideos,
     getAnalytics,
-    getVideoStatus
+    getVideoStatus,
+    startProcessing
 };
