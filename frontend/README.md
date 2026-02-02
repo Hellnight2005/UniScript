@@ -1,36 +1,80 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# UniScript Frontend
 
-## Getting Started
+The frontend for **UniScript**, built with **Next.js 15**, **Tailwind CSS**, and **Lingo.dev** for localization. It provides a modern, interactive dashboard for video content localization.
 
-First, run the development server:
+## 🚀 Key Features
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+-   **Dashboard UI**: Real-time visualization of system metrics (Processing Speed, Latency, Load).
+-   **Video Pipeline**: Drag-and-drop interface for uploading video (`.mp4`, `.mkv`) or subtitle (`.srt`) files.
+-   **Script Canvas**: Interactive viewer for transcribed scripts and translated subtitles.
+-   **Localization**: Integrated language switcher supporting 13+ languages (ES, FR, DE, JA, HI, AR, etc.) via **Lingo.dev**.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 🌍 How We Use Lingo.dev
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+We integrated **Lingo.dev** to automate our entire localization pipeline. Instead of manually translating files for every language, we utilize the Lingo CLI and AI engine.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### The Workflow
+1.  **Source of Truth**: We maintain a single English source file at `i18n/en.json`.
+2.  **Automated Translation**: When we run the pipeline, Lingo:
+    -   Reads the latest keys from `en.json`.
+    -   Uses AI to generate context-aware translations for 13+ languages (Spanish, French, Japanese, etc.).
+    -   Updates the target JSON files in `i18n/` automatically.
 
-## Learn More
+## 🤖 CI/CD with GitHub Actions
 
-To learn more about Next.js, take a look at the following resources:
+To ensure translations are never out of sync, we implemented a **GitHub Action** (`.github/workflows/translate.yml`).
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+-   **Trigger**: The workflow runs on every push to the `main` branch.
+-   **Action**: It executes `lingo run` to check for new content in the frontend.
+-   **Result**: If new translations are generated, the Action automatically creates a **Pull Request** with the updates.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+This ensures that developers only need to focus on the English source, and the specific translations are handled entirely by automation.
 
-## Deploy on Vercel
+## 🛠️ Setup & Installation
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Prerequisites
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+-   Node.js (v18 or higher)
+-   npm or yarn
+
+### Installation
+
+1.  Navigate to the directory:
+    ```bash
+    cd frontend
+    ```
+
+2.  Install dependencies:
+    ```bash
+    npm install
+    ```
+
+3.  Configure environment variables:
+    Create a `.env` file in the `frontend` directory:
+    ```env
+    LINGODOTDEV_API_KEY=your_key_here
+    NEXT_PUBLIC_API_URL=http://localhost:3001/api
+    ```
+
+4.  Run the development server:
+    ```bash
+    npm run dev
+    ```
+    Visit [http://localhost:3000](http://localhost:3000).
+
+## 📂 Structure
+
+-   `app/`: Next.js App Router (pages and layouts).
+-   `components/`: Reusable UI components (`ProfessionalUpload`, `VideoLibrary`, etc.).
+-   `i18n/`: Localization JSON files managed by Lingo.
+-   `i18n.json`: Lingo project configuration.
+-   `get-dictionary.ts`: Server-side dictionary loader for i18n.
+
+## 🤝 Development Commands
+
+| Command | Description |
+| :--- | :--- |
+| `npm run dev` | Starts the Next.js development server. |
+| `npm run build` | Builds the application for production. |
+| `npm run i18n` | Manually triggers the Lingo pipeline (`lingo run`). |
+| `npm run i18n:status` | Checks the status of your Lingo project. |
