@@ -98,6 +98,18 @@ const uploadVideo = async (req, res) => {
 
             console.log(`Video uploaded: ${videoFile.originalname} (${videoPath})`);
 
+            // FILE SIZE CHECK
+            const ONE_GB = 1024 * 1024 * 1024;
+            if (videoFile.size > ONE_GB) {
+                // Delete the file immediately
+                if (fs.existsSync(videoPath)) {
+                    fs.unlinkSync(videoPath);
+                }
+                return res.status(400).json({
+                    error: 'Video file is too large (> 1GB). Please upload a subtitle file instead or compress the video.'
+                });
+            }
+
             // 1. Get Duration and Calculate ETA
             let estimatedTimeSeconds = 0;
             let estimatedTimeText = "Calculating...";

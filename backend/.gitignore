@@ -1,0 +1,9 @@
+node_modules/
+.env
+uploads/*
+!uploads/.gitkeep
+processed/
+public/*.mp4
+public/*.mkv
+public/*.mp3
+.DS_Store
