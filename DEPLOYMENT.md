@@ -16,6 +16,8 @@ To ensure your UniScript backend deploys without errors during the hackathon, we
         *   `SUPABASE_URL`: (Your Supabase URL)
         *   `SUPABASE_KEY`: (Your Key)
         *   `LINGO_API_KEY`: (Your Lingo Key)
+        *   `OPENAI_API_KEY`: (Your OpenAI Key)
+        *   `TRANSCRIPTION_MODE`: `openai` (Crucial for Render Free Tier)
         *   `NODE_VERSION`: `20`
 6.  Click **Create Web Service**.
 
@@ -25,6 +27,20 @@ If you face any issues with libraries (like ffmpeg), Docker is the safest bet.
 
 1.  On Render/Railway, choose **"Deploy from Docker"**.
 2.  Point it to the `backend/Dockerfile` (if the platform asks for context, set it to `backend`).
+
+## 💡 Local vs. Cloud Transcription
+
+| Feature | **Local (Transformers.js)** | **Cloud (OpenAI API)** |
+| :--- | :--- | :--- |
+| **Cost** | Free 💸 | Pay-as-you-go ($$) |
+| **Memory** | High (> 1GB RAM) ⚠️ | Very Low (API based) ✅ |
+| **Accuracy** | Moderate (Fast) | High (Professional) 🏆 |
+| **Best For** | Local Dev / High-RAM VPS | Render / Railway / Production |
+
+### ⚠️ Why Avoid Local Deployment on Render?
+The local Whisper model needs significant memory to load the AI weights. On **Render's Free Tier (512MB RAM)**, this will cause an "Out of Memory" (OOM) error and crash your server. 
+
+Always set `TRANSCRIPTION_MODE=openai` in your production environment variables to ensure stability.
 
 ## ⚠️ Important Hackathon Tips
 

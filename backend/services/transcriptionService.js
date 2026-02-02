@@ -10,6 +10,7 @@ const openai = new OpenAI({
 
 // Transcription Mode Configuration
 const TRANSCRIPTION_MODE = process.env.TRANSCRIPTION_MODE || 'openai'; // 'local' or 'openai'
+const WHISPER_MODEL = process.env.WHISPER_MODEL || 'Xenova/whisper-tiny.en'; // For local mode: e.g., 'Xenova/whisper-base.en'
 
 // Lazy load the pipeline to avoid heavy startup if not needed immediately
 let transcriber = null;
@@ -18,9 +19,9 @@ const getTranscriber = async () => {
     if (TRANSCRIPTION_MODE !== 'local') return null;
 
     if (!transcriber) {
-        console.log("⏳ Loading Local Whisper Model (Xenova/whisper-tiny.en)... this may take a moment.");
-        transcriber = await pipeline('automatic-speech-recognition', 'Xenova/whisper-tiny.en');
-        console.log("✅ Local Whisper Model Loaded.");
+        console.log(`⏳ Loading Local Whisper Model (${WHISPER_MODEL})... this may take a moment.`);
+        transcriber = await pipeline('automatic-speech-recognition', WHISPER_MODEL);
+        console.log(`✅ Local Whisper Model (${WHISPER_MODEL}) Loaded.`);
     }
     return transcriber;
 };
