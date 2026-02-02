@@ -132,8 +132,10 @@ const uploadVideo = async (req, res) => {
                 .insert([
                     {
                         title: title || videoFile.originalname,
-                        video_url: videoPath, // Storing local path for now
-                        original_language: 'en' // Default
+                        video_url: videoPath,
+                        original_language: 'en',
+                        status: 'PENDING',
+                        progress: 0
                     }
                 ])
                 .select()
@@ -181,33 +183,46 @@ const processVideo = async (videoId, videoPath) => {
     try {
         console.log(`Processing video ${videoId}...`);
 
+        // Update: EXTRACTING_AUDIO (10%)
+        await supabase.from('videos').update({ status: 'EXTRACTING_AUDIO', progress: 10 }).eq('id', videoId);
+
         // 1. Extract Audio
         const audioPath = await extractAudio(videoPath);
+
+        // Update: AUDIO_EXTRACTED (25%)
+        await supabase.from('videos').update({ status: 'AUDIO_EXTRACTED', progress: 25 }).eq('id', videoId);
 
         // 2. Split Audio (if needed)
         const audioChunks = await splitAudio(audioPath);
         console.log(`Audio chunks to process: ${audioChunks.length}`);
 
+        // Update: TRANSCRIBING (40%)
+        await supabase.from('videos').update({ status: 'TRANSCRIBING', progress: 40 }).eq('id', videoId);
+
         // 3. Transcribe Chunks
         let fullTranscript = { text: "", segments: [] };
 
-        for (const chunkPath of audioChunks) {
+        for (let i = 0; i < audioChunks.length; i++) {
+            const chunkPath = audioChunks[i];
             console.log(`Transcribing chunk: ${chunkPath}`);
             const result = await transcribeAudio(chunkPath);
 
-            // Append text
             fullTranscript.text += (fullTranscript.text ? " " : "") + result.text;
-
-            // Adjust and append segments (timestamp offset handling would be needed for precise multi-chunk)
             if (result.segments) {
                 fullTranscript.segments.push(...result.segments);
             }
 
-            // Clean up chunk if it's a split file
+            // Update Progress incrementally during transcription (40% to 75%)
+            const progress = 40 + Math.floor(((i + 1) / audioChunks.length) * 35);
+            await supabase.from('videos').update({ progress }).eq('id', videoId);
+
             if (chunkPath !== audioPath && fs.existsSync(chunkPath)) {
                 fs.unlinkSync(chunkPath);
             }
         }
+
+        // Update: FINALIZING (80%)
+        await supabase.from('videos').update({ status: 'FINALIZING', progress: 80 }).eq('id', videoId);
 
         // 4. Generate Clean Script
         const cleanText = await generateCleanScript(fullTranscript.text);
@@ -229,19 +244,41 @@ const processVideo = async (videoId, videoPath) => {
                 }
             ]);
 
-        if (dbError) {
-            console.error('Failed to save script to DB:', dbError);
-        } else {
-            console.log(`Script saved for video ${videoId}`);
-        }
+        if (dbError) throw dbError;
 
-        // Clean up extracted audio
+        // Update: DONE (100%)
+        await supabase.from('videos').update({ status: 'DONE', progress: 100 }).eq('id', videoId);
+        console.log(`Script saved for video ${videoId}`);
+
         if (fs.existsSync(audioPath)) {
             fs.unlinkSync(audioPath);
         }
 
     } catch (error) {
         console.error(`Error processing video ${videoId}:`, error);
+        await supabase.from('videos').update({
+            status: 'ERROR',
+            error_message: error.message
+        }).eq('id', videoId);
+    }
+};
+
+const getVideoStatus = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { data, error } = await supabase
+            .from('videos')
+            .select('status, progress, error_message')
+            .eq('id', id)
+            .single();
+
+        if (error || !data) {
+            return res.status(404).json({ error: 'Job not found' });
+        }
+
+        res.json(data);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
     }
 };
 
@@ -566,5 +603,6 @@ module.exports = {
     getTranslations,
     downloadTranslation,
     getLatestVideos,
-    getAnalytics
+    getAnalytics,
+    getVideoStatus
 };

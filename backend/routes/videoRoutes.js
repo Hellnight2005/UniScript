@@ -7,7 +7,7 @@ router.post('/upload', upload.fields([{ name: 'video', maxCount: 1 }, { name: 's
 
 router.get('/', videoController.getLatestVideos);
 router.get('/analytics', videoController.getAnalytics);
-
+router.get('/:id/status', videoController.getVideoStatus);
 router.get('/:id/script', videoController.getScript);
 router.get('/:id/script/download', videoController.downloadScript);
 
