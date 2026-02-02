@@ -11,6 +11,13 @@ export function VideoLibrary() {
 
     const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
+    const handleDownload = (jobId: string, format: 'srt' | 'txt', type: 'original' | 'translated' = 'original') => {
+        const endpoint = type === 'original'
+            ? `${API_URL}/api/videos/${jobId}/script/download?format=${format}`
+            : `${API_URL}/api/videos/${jobId}/script/download?format=${format}&target=true`;
+        window.open(endpoint, '_blank');
+    };
+
     useEffect(() => {
         fetch(`${API_URL}/api/videos`)
             .then(res => res.json())
@@ -45,9 +52,16 @@ export function VideoLibrary() {
                                 <div className="p-2 bg-white dark:bg-zinc-950 rounded-lg shadow-sm">
                                     <FileVideo className="h-5 w-5 text-zinc-900 dark:text-zinc-100" />
                                 </div>
-                                <Badge variant="outline" className="text-[10px] uppercase">
-                                    {video.original_language || 'EN'}
-                                </Badge>
+                                <div className="flex flex-col items-end gap-1">
+                                    <Badge variant="outline" className="text-[10px] uppercase font-bold">
+                                        {video.original_language || 'EN'}
+                                    </Badge>
+                                    {video.target_language && video.target_language !== 'en' && (
+                                        <Badge variant="default" className="text-[9px] uppercase bg-accent text-white border-0 py-0 h-4">
+                                            → {video.target_language}
+                                        </Badge>
+                                    )}
+                                </div>
                             </div>
                         </CardHeader>
                         <CardContent className="p-4">
@@ -66,15 +80,40 @@ export function VideoLibrary() {
                                 </div>
                             </div>
 
-                            <div className="mt-4 pt-4 border-t border-zinc-100 dark:border-zinc-800 flex justify-between items-center">
-                                <button className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 hover:underline">
-                                    View Details
-                                </button>
-                                <div className="flex -space-x-1">
-                                    <div className="h-5 w-5 rounded-full border-2 border-white dark:border-zinc-950 bg-zinc-200 dark:bg-zinc-800 flex items-center justify-center">
-                                        <Languages className="h-2.5 w-2.5" />
+                            <div className="mt-6 pt-4 border-t border-zinc-100 dark:border-zinc-800 space-y-3">
+                                {video.status === 'DONE' ? (
+                                    <>
+                                        {video.target_language && video.target_language !== 'en' ? (
+                                            <div className="flex flex-col gap-2">
+                                                <button
+                                                    onClick={() => handleDownload(video.id, 'srt', 'translated')}
+                                                    className="w-full py-2.5 bg-accent hover:bg-accent/90 text-white rounded-xl text-xs font-bold shadow-md shadow-accent/10 transition-all flex items-center justify-center gap-2"
+                                                >
+                                                    <Globe className="h-3.5 w-3.5" />
+                                                    DOWNLOAD {video.target_language.toUpperCase()} SRT
+                                                </button>
+                                                <button
+                                                    onClick={() => handleDownload(video.id, 'srt', 'original')}
+                                                    className="w-full py-2 text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 text-[10px] font-semibold transition-colors border border-dashed border-zinc-200 dark:border-zinc-800 rounded-lg"
+                                                >
+                                                    English Reference
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <button
+                                                onClick={() => handleDownload(video.id, 'srt', 'original')}
+                                                className="w-full py-2.5 bg-zinc-900 dark:bg-zinc-50 text-white dark:text-zinc-900 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2"
+                                            >
+                                                DOWNLOAD SRT
+                                            </button>
+                                        )}
+                                    </>
+                                ) : (
+                                    <div className="flex items-center justify-center gap-2 py-2.5 text-zinc-400 italic text-xs">
+                                        <div className="h-1.5 w-1.5 rounded-full bg-accent animate-ping" />
+                                        {video.status.replace(/_/g, ' ')}...
                                     </div>
-                                </div>
+                                )}
                             </div>
                         </CardContent>
                     </Card>
