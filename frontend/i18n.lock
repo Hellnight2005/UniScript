@@ -45,3 +45,48 @@ checksums:
     Health%20status: cfcac122fefe0a1df64f12609a6d8947
     Get%20Started: 1d5f030c4ec9c869e647ae060518b948
     Documentation: 1563fcb5ddb5037b0709ccd3dd384a92
+  4188a166aad2705b4f09401f924502ed:
+    UniScript%20Dashboard: bf12e61df3022183493f24d15c119257
+    AI-Powered%20Content%20Localization%20Pipeline: c9d6c11a9deb7be866e0a4d27214e003
+    Performance%20Overview: a239a78ae9aa9d8fdc14bed2ac5d34b8
+    Real-time%20system%20metrics%20and%20usage%20stats: eaf54e35833356c31241aed7d11559af
+    Connected%20to%20production%20nodes: 5332d0418f29b33eedb943f8c0dc1d69
+    Content%20Pipeline: fd9191dd1aa070138a42818a83f73511
+    Upload%20video%20or%20subtitle%20file%20for%20processing: dd0b2b0b11b04cb72b0331effae5bcee
+    Click%20to%20upload%20or%20drag%20and%20drop: dc7919abe455c0e3e2dae962caf3d80e
+    Supports%20MP4%2C%20MKV%2C%20SRT%20(Max%201GB): 4f3bf0f960c4e246dac48e57191fdfe2
+    Start%20Pipeline: 780e0d284c09d0672990a393ddc93205
+    File%20Uploaded!: 7e5825587fb317afb26870f94f82f98f
+    Search%20and%20select%20a%20target%20language%20for%20translation: 0e1c533befa2a2223b110f93b7a7bac5
+    Search%20languages: 4a572a0ae5976b71a33f9a00e9978b9f
+    No%20languages%20found%20matching: 755d2d7e28bf63bf37e8ee90a83b6a1b
+    Continue%20with%20Original%20English%20only: 525ecbe41cbcaf4fe6fa618983eddd29
+    Uploading%20Video...: 6cd73b1778f50f245df53977cf1b8784
+    AI%20Processing...: 7d1e2e836c143cf4016d4f85d2e2d55c
+    Initializing%20pipeline: e212d57bad5ac722daac1c82a817278b
+    Processing%20Complete!: 94b5aaf095528a249890f34ed9c88b32
+    Your%20transcript%20and%20subtitles%20are%20ready%20to%20view%20and%20download.: c422c4874bc3ae5e3554939059392147
+    View%20Full%20Script: 8ca0928a015c1c870fec91be1d0d3827
+    Translated%20Deliverables: d50813e63204fb42abaeaf2e9cb3350f
+    Priority: 0b062687108df307445af848763e4ce5
+    Download: 56b7d0834952b39ee394b44bd8179178
+    Original%20Reference%20(English): 9e4b7db0dc2b58b4abac3cadcdb67259
+    Original%20(EN): b62fa140b8744a0afeaf285b5418a26f
+    Process%20another%20video: ebf41445e9493a8a16c0738dca1566f0
+    Processing%20Failed: a5bea78bbbcc79b08d7fca36e8ef8eb1
+    Please%20try%20again%20or%20contact%20support.: 7f84d9650dbbd57e703e53f72195bcb6
+    Retry: 6e44d18639560596569a1278f9c83676
+    Script%20Canvas: 357e69ce941ff7267ee511e9d2cca6e1
+    Processed%20Transcript: 79e003220c6d6fdc4e14fbe6fbbbe3ff
+    Copy%20Full%20Script: 2f137e42846e3807f605740c8ea64a23
+    Copied%20to%20Clipboard: 15d81c938b53bf043d4b03a9fd7d4eec
+    Total%20Videos: 81eb2f172f8eb26c3ac40033c624790b
+    Uploaded%20assets: 6fbdecbf28408640a3ddc737d39a9bb9
+    Total%20Scripts: 172963cc3fe6185d1cae1cb105caab53
+    Transcribed%20content: ea85fda6720afc1f4185e4d117d913de
+    Avg%20Speed: cebbd11ef2d954f76cc42917d1da7c76
+    Processing%20latency: ba9f8df7ee9f6648da318df547f1aefa
+    System%20Load: 43d5bec4f3f87f4eeddaf2dcca4d4bad
+    Health%20status: cfcac122fefe0a1df64f12609a6d8947
+    Get%20Started: 1d5f030c4ec9c869e647ae060518b948
+    Documentation: 1563fcb5ddb5037b0709ccd3dd384a92
