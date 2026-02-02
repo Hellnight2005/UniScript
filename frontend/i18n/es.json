@@ -1,1 +1,9 @@
-{}
+{
+    "welcome": "Panel UniScript",
+    "subtitle": "Canal de Localización de Contenido impulsado por IA",
+    "upload_title": "Canal de Contenido",
+    "upload_desc": "Subir video o archivo de subtítulos para procesar",
+    "latest_uploads": "Últimas Cargas",
+    "analytics_title": "Resumen de Rendimiento",
+    "connected_to": "Conectado a nodos de producción"
+}

@@ -1,4 +1,9 @@
 {
-	"welcome": "Welcome to UniScript",
-	"subtitle": "Your AI-powered video transcription platform."
+	"welcome": "UniScript Dashboard",
+	"subtitle": "AI-Powered Content Localization Pipeline",
+	"upload_title": "Content Pipeline",
+	"upload_desc": "Upload video or subtitle file for processing",
+	"latest_uploads": "Latest Uploads",
+	"analytics_title": "Performance Overview",
+	"connected_to": "Connected to production nodes"
 }

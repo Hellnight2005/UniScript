@@ -1,14 +1,24 @@
 const fs = require('fs');
 const wav = require('wavefile');
 const { pipeline } = require('@xenova/transformers');
+const { OpenAI } = require('openai');
+
+// Initialize OpenAI for Cloud Mode
+const openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+});
+
+// Transcription Mode Configuration
+const TRANSCRIPTION_MODE = process.env.TRANSCRIPTION_MODE || 'openai'; // 'local' or 'openai'
 
 // Lazy load the pipeline to avoid heavy startup if not needed immediately
 let transcriber = null;
 
 const getTranscriber = async () => {
+    if (TRANSCRIPTION_MODE !== 'local') return null;
+
     if (!transcriber) {
         console.log("⏳ Loading Local Whisper Model (Xenova/whisper-tiny.en)... this may take a moment.");
-        // Use 'tiny.en' for speed, or 'base.en' for better accuracy
         transcriber = await pipeline('automatic-speech-recognition', 'Xenova/whisper-tiny.en');
         console.log("✅ Local Whisper Model Loaded.");
     }
@@ -16,12 +26,54 @@ const getTranscriber = async () => {
 };
 
 /**
- * Transcribes an audio file using Local Whisper (Transformers.js).
+ * Transcribes an audio file. Supports both Local (Transformers.js) and Cloud (OpenAI).
  * @param {string} audioPath - Path to audio file.
- * @returns {Promise<Object>} - Raw transcription result (mimicking OpenAI format).
+ * @returns {Promise<Object>} - Transcription result.
  */
 const transcribeAudio = async (audioPath) => {
-    console.log(`Transcribing locally: ${audioPath}`);
+    if (TRANSCRIPTION_MODE === 'openai') {
+        return transcribeWithOpenAI(audioPath);
+    } else {
+        return transcribeLocally(audioPath);
+    }
+};
+
+/**
+ * Transcribes using OpenAI Whisper API (Memory Efficient).
+ */
+const transcribeWithOpenAI = async (audioPath) => {
+    console.log(`Cloud Transcribing (OpenAI): ${audioPath}`);
+    try {
+        if (!process.env.OPENAI_API_KEY) {
+            throw new Error("OPENAI_API_KEY is missing in .env");
+        }
+
+        const transcription = await openai.audio.transcriptions.create({
+            file: fs.createReadStream(audioPath),
+            model: "whisper-1",
+            response_format: "verbose_json",
+            timestamp_granularities: ["segment"],
+        });
+
+        return {
+            text: transcription.text,
+            segments: (transcription.segments || []).map(seg => ({
+                start: seg.start,
+                end: seg.end,
+                text: seg.text.trim()
+            }))
+        };
+    } catch (error) {
+        console.error("OpenAI Transcription Error:", error.message);
+        throw error;
+    }
+};
+
+/**
+ * Transcribes using Local Whisper (Memory Intensive).
+ */
+const transcribeLocally = async (audioPath) => {
+    console.log(`Local Transcribing (Xenova): ${audioPath}`);
     try {
         const pipe = await getTranscriber();
 
