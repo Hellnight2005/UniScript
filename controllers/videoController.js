@@ -502,11 +502,57 @@ const downloadTranslation = async (req, res) => {
     }
 };
 
+const getLatestVideos = async (req, res) => {
+    try {
+        const { limit } = req.query;
+        // Default to fetching last 10 videos
+        const limitCount = limit ? parseInt(limit) : 10;
+
+        const { data, error } = await supabase
+            .from('videos')
+            .select('*')
+            .order('created_at', { ascending: false })
+            .limit(limitCount);
+
+        if (error) {
+            throw error;
+        }
+
+        res.json(data);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+const getAnalytics = async (req, res) => {
+    try {
+        const { count: videoCount, error: videoError } = await supabase
+            .from('videos')
+            .select('*', { count: 'exact', head: true });
+
+        const { count: scriptCount, error: scriptError } = await supabase
+            .from('scripts')
+            .select('*', { count: 'exact', head: true });
+
+        if (videoError) throw videoError;
+        if (scriptError) throw scriptError;
+
+        res.json({
+            total_videos: videoCount,
+            total_scripts: scriptCount
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
 module.exports = {
     uploadVideo,
     getScript,
     downloadScript,
     translateVideo,
     getTranslations,
-    downloadTranslation
+    downloadTranslation,
+    getLatestVideos,
+    getAnalytics
 };
